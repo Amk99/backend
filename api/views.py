@@ -2,11 +2,13 @@ from rest_framework import generics,viewsets,status
 from api import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth import authenticate
+from django.shortcuts import get_object_or_404
 from rest_framework.authtoken.models import Token
+from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny,IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .models import Post
+from .models import Post,Like,Comment
 
 from rest_framework.status import (
     HTTP_400_BAD_REQUEST,
@@ -83,3 +85,87 @@ class PostDetail(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Post.objects.all()
     serializer_class = serializers.PostSerialzer
+
+
+    def get(self, request, pk=None):
+        # Get the post with the given pk
+        post = get_object_or_404(Post, pk=pk)
+
+        # Get all the comments for the post
+        comments = post.comments.all()
+
+        # Serialize the comments using the CommentSerializer
+        serializer = serializers.CommentSerializer(comments, many=True)
+
+        # Add the post id and post title to the response data
+        data = {
+            'post_id': post.id,
+            'post_title': post.title,
+            'post_description':post.description,
+            'created_at':post.created_at,
+            'comments': serializer.data,
+            'likes':post.likes_count(),
+        }
+
+        # Return the serialized comments data in the response
+        return Response(data)
+
+    def delete(self, request, pk):
+        post=Post.objects.get(pk=pk)
+        if request.user != post.creator:
+            return Response(
+                {'message': "you do not have permission to do this action"},
+                status=status.HTTP_403_FORBIDDEN)
+        post.delete()
+        return Response({'message': 'post was deleted successfully!'}, status=status.HTTP_204_NO_CONTENT)
+
+
+
+
+class LikeViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = Like.objects.all()
+    serializer_class = serializers.LikeSerializer
+
+    @action(detail=True, methods=['post'])
+    def like(self, request, pk=None):
+        # Check if the user has already liked the post
+        post = get_object_or_404(Post, id=pk)
+        like = Like.objects.filter(user=request.user, post=post).first()
+        if like is None:
+            # Like the post if the user has not already liked it
+            like = Like.objects.create(user=request.user, post=post)
+            serializer = self.get_serializer(like)
+            return Response(serializer.data)
+        else:
+            # Return an error if the user has already liked the post
+            return Response({"error": "You have already liked this post."}, status=400)
+
+    @action(detail=True, methods=['delete'])
+    def unlike(self, request, pk=None):
+        post = get_object_or_404(Post, id=pk)
+        # Check if the user has liked the post
+        like = Like.objects.filter(user=request.user, post=post).first()
+        if like is not None:
+            # Unlike the post if the user has liked it
+            like.delete()
+            return Response({"message":"Post Unliked"},status = 204)
+        else:
+            # Return an error if the user has not liked the post
+            return Response({"error":"You have not liked the post."},status=400)
+
+
+
+class CommentCreateView(generics.CreateAPIView):
+    serializer_class = serializers.CommentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request,pk):
+        user = request.user
+        post = get_object_or_404(Post, pk=pk)
+        text = request.data.get('text')
+        Comment.objects.create(author=user, post=post, text=text)
+        return Response({"Message":f"You have commented {text} the post id {pk}."},status=400)
+
+
+
