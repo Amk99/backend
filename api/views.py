@@ -9,6 +9,7 @@ from rest_framework.permissions import AllowAny,IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import Post,Like,Comment
+from django.db.models import Prefetch
 
 from rest_framework.status import (
     HTTP_400_BAD_REQUEST,
@@ -21,8 +22,19 @@ User = get_user_model()
 
 class UserList(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
-    queryset = User.objects.all()
-    serializer_class = serializers.UserSerializer
+    def get(self,request,format = None):
+        serializer = serializers.UserSerializer(request.user)
+        return Response(serializer.data)
+
+class PostList(generics.ListAPIView):
+    permission_classes = (IsAuthenticated,)
+    def get(self, request):
+        # Get the posts for the logged in user
+        posts = Post.objects.filter(creator=request.user)
+        # Serialize the posts using the modified PostSerializer
+        serializer = serializers.PostSerializer(posts, many=True)
+        # Return the serialized data in the response
+        return Response(serializer.data)
 
 class UserDetail(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
@@ -75,7 +87,7 @@ class FollowView(viewsets.ViewSet):
 class PostCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     model = Post
-    serializer_class = serializers.PostSerialzer
+    serializer_class = serializers.PostSerializer
     def perform_create(self, serializer):
         serializer.save(creator_id=self.request.user.id)
 
@@ -84,7 +96,7 @@ class PostCreateView(generics.CreateAPIView):
 class PostDetail(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Post.objects.all()
-    serializer_class = serializers.PostSerialzer
+    serializer_class = serializers.PostSerializer
 
 
     def get(self, request, pk=None):
