@@ -73,12 +73,13 @@ class FollowView(viewsets.ViewSet):
     queryset = User.objects
 
     def follow(self, request, pk):
-        # your follow code
+        # follow the user
         profile = User.objects.get(pk=pk)
         profile.followers.add(request.user)
         return Response({'message': 'now you are following'}, status=status.HTTP_200_OK)
 
     def unfollow(self, request, pk):
+        # unfollow user
         profile = User.objects.get(pk=pk)
         profile.followers.remove(request.user)
         return Response({'message': 'you have unfollowed this user'}, status=status.HTTP_200_OK)
@@ -88,6 +89,7 @@ class PostCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     model = Post
     serializer_class = serializers.PostSerializer
+    # create post if user is authenticated
     def perform_create(self, serializer):
         serializer.save(creator_id=self.request.user.id)
 
@@ -123,11 +125,13 @@ class PostDetail(generics.RetrieveAPIView):
         return Response(data)
 
     def delete(self, request, pk):
+        # check authorization
         post=Post.objects.get(pk=pk)
         if request.user != post.creator:
             return Response(
                 {'message': "you do not have permission to do this action"},
                 status=status.HTTP_403_FORBIDDEN)
+        # delete the post
         post.delete()
         return Response({'message': 'post was deleted successfully!'}, status=status.HTTP_204_NO_CONTENT)
 
@@ -174,8 +178,10 @@ class CommentCreateView(generics.CreateAPIView):
 
     def create(self, request,pk):
         user = request.user
+        # find the post in database
         post = get_object_or_404(Post, pk=pk)
         text = request.data.get('text')
+        # create the comment
         Comment.objects.create(author=user, post=post, text=text)
         return Response({"Message":f"You have commented {text} the post id {pk}."},status=400)
 
